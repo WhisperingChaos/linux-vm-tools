@@ -8,12 +8,6 @@
 #
 
 ###############################################################################
-# Use HWE kernel packages
-#
-HWE=""
-#HWE="-hwe-18.04"
-
-###############################################################################
 # Update our machine to the latest code if we need to.
 #
 
@@ -30,16 +24,60 @@ if [ -f /var/run/reboot-required ]; then
     exit 1
 fi
 
+declare -r GA_KERNEL_VER="4.15"
 ###############################################################################
 # XRDP
 #
 
+get_kernel_type(){
+    patVER='([0-9]+\.[0-9]+)'
+    [[ $(uname -r) =~ $patVER ]]
+    declare -r kernelVER="${BASH_REMATCH[1]}"
+    declare kernelTYPE='GA'
+    if [ "$kernelVER" != "$GA_KERNEL_VER" ]; then
+        # Using linux kernel other than General Availability one.
+        kernelTYPE='HWE'
+    fi
+    echo $kernelTYPE	
+}
+
+install_GA_kernel(){
+    # General Availability packages when first released
+    install_hv_kvp_tools(){
+        apt install -y linux-tools-virtual
+        apt install -y linux-cloud-tools-virtual
+    }
+    install_xrdp(){
+        apt install -y xrdp
+    }
+}
+install_HWE_kernel(){
+    # HWE packages for kernel upgrades
+    install_dist_release(){
+        distPAT='^.+:[[:space:]]*([0-9]+\.[0-9]+)'
+        [[ $(lsb_release -r) =~ $distPAT ]]
+        echo "${BASH_REMATCH[1]}"
+    }
+    install_hv_kvp_tools(){
+        declare -r REL=$(install_dist_release)
+        apt install -y linux-tools-virtual-hwe-${REL}
+        apt install -y linux-cloud-tools-virtual-hwe-${REL}
+    }
+    install_xrdp(){
+        apt install -y xrdp
+        declare -r REL=$(install_dist_release)
+        apt install -y xorgxrdp-hwe-${REL}
+    }
+}
+
+# configure polymorphic functions
+install_$(get_kernel_type)_kernel
+
 # Install hv_kvp utils
-apt install -y linux-tools-virtual${HWE}
-apt install -y linux-cloud-tools-virtual${HWE}
+install_hv_kvp_tools
 
 # Install the xrdp service so we have the auto start behavior
-apt install -y xrdp
+install_xrdp
 
 systemctl stop xrdp
 systemctl stop xrdp-sesman
